@@ -2,12 +2,11 @@ package main
 
 import (
 	"fmt"
-	"sync" // Для безопасной работы с map из разных горутин
+	"sync"
 
 	"github.com/shopspring/decimal"
 )
 
-// Простое хранилище в памяти
 type InMemoryStorage struct {
 	users        map[string]User     // key: UserID
 	accounts     map[string]Account  // key: AccountID
@@ -38,9 +37,6 @@ func InitStorage() {
 		loanIndex:    make(map[string][]string),
 	}
 }
-
-// --- Функции для работы с хранилищем (CRUD) ---
-// Важно: Всегда используем Lock/Unlock или RLock/RUnlock
 
 func AddUser(user User) error {
 	storage.mu.Lock()
@@ -101,14 +97,8 @@ func GetUserAccounts(userID string) []Account {
 	return accounts
 }
 
-// --- Добавьте аналогичные функции для Card, Loan, Transaction ---
-// AddCard, GetCard, GetAccountCards
-// AddLoan, GetLoan, GetUserLoans
-// AddTransaction, GetAccountTransactions
-
-// Функция для обновления баланса (важно делать это атомарно)
 func UpdateAccountBalance(accountID string, amount decimal.Decimal) error {
-	storage.mu.Lock() // Полная блокировка для изменения
+	storage.mu.Lock()
 	defer storage.mu.Unlock()
 
 	acc, ok := storage.accounts[accountID]
@@ -117,13 +107,11 @@ func UpdateAccountBalance(accountID string, amount decimal.Decimal) error {
 	}
 
 	newBalance := acc.Balance.Add(amount)
-	// Проверка на отрицательный баланс (можно усложнить логикой овердрафта)
 	if newBalance.IsNegative() {
-		// return fmt.Errorf("insufficient funds in account %s", accountID) // Пока разрешим
 	}
 
 	acc.Balance = newBalance
-	storage.accounts[accountID] = acc // Обновляем структуру в карте
+	storage.accounts[accountID] = acc
 	return nil
 }
 

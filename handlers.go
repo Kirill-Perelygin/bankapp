@@ -13,7 +13,6 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// --- Вспомогательная функция для отправки JSON ответа ---
 func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
 	response, err := json.Marshal(payload)
 	if err != nil {
@@ -27,15 +26,11 @@ func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
 	w.Write(response)
 }
 
-// --- Вспомогательная функция для отправки ошибки ---
 func respondError(w http.ResponseWriter, code int, message string) {
 	log.Printf("HTTP Error %d: %s", code, message)
 	respondJSON(w, code, map[string]string{"error": message})
 }
 
-// --- Обработчики ---
-
-// POST /register
 func RegisterUserHandler(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -64,11 +59,10 @@ func RegisterUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := AddUser(user); err != nil {
-		respondError(w, http.StatusConflict, err.Error()) // Ошибка конфликта (имя/email заняты)
+		respondError(w, http.StatusConflict, err.Error())
 		return
 	}
 
-	// Отправляем уведомление о регистрации (в фоне, чтобы не блокировать ответ)
 	go func() {
 		subject := "Welcome to Simple Bank!"
 		body := fmt.Sprintf("Hello %s,\n\nThank you for registering at Simple Bank.", user.Username)
@@ -79,12 +73,10 @@ func RegisterUserHandler(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	log.Printf("User registered: %s (ID: %s)", user.Username, user.ID)
-	// Не возвращаем хеш пароля
 	user.PasswordHash = ""
 	respondJSON(w, http.StatusCreated, user)
 }
 
-// POST /login
 func LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -104,18 +96,14 @@ func LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Успешный вход
-	// В реальном приложении здесь бы генерировался и возвращался токен (JWT)
 	log.Printf("User logged in: %s", user.Username)
 	respondJSON(w, http.StatusOK, map[string]string{
 		"message": "Login successful",
-		"user_id": user.ID, // Просто возвращаем ID для учебных целей
+		"user_id": user.ID,
 	})
 }
 
-// POST /accounts
 func CreateAccountHandler(w http.ResponseWriter, r *http.Request) {
-	// ВАЖНО: Нет проверки аутентификации! Должна быть Middleware.
 	var req CreateAccountRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request payload")
@@ -132,7 +120,7 @@ func CreateAccountHandler(w http.ResponseWriter, r *http.Request) {
 		ID:        GenerateID(),
 		UserID:    req.UserID,
 		Number:    GenerateAccountNumber(),
-		Balance:   decimal.Zero, // Начальный баланс 0
+		Balance:   decimal.Zero,
 		CreatedAt: time.Now(),
 	}
 
@@ -145,9 +133,7 @@ func CreateAccountHandler(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusCreated, account)
 }
 
-// GET /users/{userId}/accounts
 func GetUserAccountsHandler(w http.ResponseWriter, r *http.Request) {
-	// ВАЖНО: Нет проверки аутентификации/авторизации!
 	vars := mux.Vars(r)
 	userID := vars["userId"]
 
@@ -156,9 +142,7 @@ func GetUserAccountsHandler(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, accounts)
 }
 
-// POST /cards
 func GenerateCardHandler(w http.ResponseWriter, r *http.Request) {
-	// ВАЖНО: Нет проверки аутентификации!
 	var req GenerateCardRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request payload")
@@ -178,7 +162,7 @@ func GenerateCardHandler(w http.ResponseWriter, r *http.Request) {
 		Number:      GenerateCardNumber(),
 		ExpiryMonth: month,
 		ExpiryYear:  year,
-		CVV:         GenerateCVV(), // CVV генерируется, но не должен храниться или возвращаться!
+		CVV:         GenerateCVV(),
 		CreatedAt:   time.Now(),
 	}
 
@@ -188,14 +172,11 @@ func GenerateCardHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("Card generated for account %s", card.AccountID)
-	// НИКОГДА не возвращаем CVV клиенту!
-	card.CVV = "***" // Маскируем для ответа
+	card.CVV = "***"
 	respondJSON(w, http.StatusCreated, card)
 }
 
-// GET /accounts/{accountId}/cards
 func GetAccountCardsHandler(w http.ResponseWriter, r *http.Request) {
-	// ВАЖНО: Нет проверки аутентификации/авторизации!
 	vars := mux.Vars(r)
 	accountID := vars["accountId"]
 
@@ -205,7 +186,6 @@ func GetAccountCardsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cards := GetAccountCards(accountID)
-	// Маскируем CVV перед отправкой
 	for i := range cards {
 		cards[i].CVV = "***"
 	}
@@ -213,9 +193,7 @@ func GetAccountCardsHandler(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, cards)
 }
 
-// POST /payments/card (Очень упрощенная "оплата картой")
 func PayWithCardHandler(w http.ResponseWriter, r *http.Request) {
-	// ВАЖНО: Нет проверки аутентификации! Нет проверки CVV, Expiry!
 	var req PaymentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request payload")
@@ -234,7 +212,6 @@ func PayWithCardHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Проверяем срок действия карты (очень упрощенно)
 	now := time.Now()
 	expiry := time.Date(card.ExpiryYear, time.Month(card.ExpiryMonth)+1, 0, 23, 59, 59, 0, time.UTC) // Последний день месяца
 	if now.After(expiry) {
@@ -242,31 +219,27 @@ func PayWithCardHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Пытаемся списать деньги со счета, к которому привязана карта
 	account, ok := GetAccount(card.AccountID)
 	if !ok {
-		// Этого не должно быть, если карта существует
 		respondError(w, http.StatusInternalServerError, "Associated account not found")
 		return
 	}
 
 	if account.Balance.LessThan(req.Amount) {
-		respondError(w, http.StatusPaymentRequired, "Insufficient funds") // Код 402
+		respondError(w, http.StatusPaymentRequired, "Insufficient funds")
 		return
 	}
 
-	// Списываем деньги
-	err := UpdateAccountBalance(account.ID, req.Amount.Neg()) // Списываем (отрицательная сумма)
+	err := UpdateAccountBalance(account.ID, req.Amount.Neg())
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to process payment: %v", err))
 		return
 	}
 
-	// Записываем транзакцию
 	tx := Transaction{
 		ID:              GenerateID(),
-		FromAccountID:   account.ID, // Списание со счета
-		ToAccountID:     "",         // Получатель - внешний мерчант
+		FromAccountID:   account.ID,
+		ToAccountID:     "",
 		Amount:          req.Amount,
 		Timestamp:       time.Now(),
 		TransactionType: "payment",
@@ -278,9 +251,7 @@ func PayWithCardHandler(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{"message": "Payment successful"})
 }
 
-// POST /transfers
 func TransferHandler(w http.ResponseWriter, r *http.Request) {
-	// ВАЖНО: Нет проверки аутентификации/авторизации!
 	var req TransferRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request payload")
@@ -297,8 +268,6 @@ func TransferHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Блокируем хранилище на время всей операции (простое решение для избежания гонок)
-	// В более сложных системах нужны блокировки на уровне счетов.
 	storage.mu.Lock()
 	defer storage.mu.Unlock()
 
@@ -314,21 +283,17 @@ func TransferHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Проверяем баланс отправителя
 	if fromAccount.Balance.LessThan(req.Amount) {
 		respondError(w, http.StatusPaymentRequired, "Insufficient funds in source account")
 		return
 	}
 
-	// Выполняем перевод
 	fromAccount.Balance = fromAccount.Balance.Sub(req.Amount)
 	toAccount.Balance = toAccount.Balance.Add(req.Amount)
 
-	// Сохраняем изменения
 	storage.accounts[req.FromAccountID] = fromAccount
 	storage.accounts[req.ToAccountID] = toAccount
 
-	// Записываем транзакцию (без вызова AddTransaction, т.к. мьютекс уже захвачен)
 	tx := Transaction{
 		ID:              GenerateID(),
 		FromAccountID:   req.FromAccountID,
@@ -344,9 +309,7 @@ func TransferHandler(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{"message": "Transfer successful"})
 }
 
-// POST /deposits
 func DepositHandler(w http.ResponseWriter, r *http.Request) {
-	// ВАЖНО: Нет проверки аутентификации!
 	var req DepositRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request payload")
@@ -359,10 +322,8 @@ func DepositHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Используем UpdateAccountBalance, т.к. он потокобезопасен
 	err := UpdateAccountBalance(req.ToAccountID, req.Amount)
 	if err != nil {
-		// Проверяем, была ли ошибка "account not found"
 		if strings.Contains(err.Error(), "not found") {
 			respondError(w, http.StatusNotFound, err.Error())
 		} else {
@@ -371,11 +332,10 @@ func DepositHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Записываем транзакцию
-	account, _ := GetAccount(req.ToAccountID) // Получаем номер счета для описания
+	account, _ := GetAccount(req.ToAccountID)
 	tx := Transaction{
 		ID:              GenerateID(),
-		FromAccountID:   "", // Внешний источник
+		FromAccountID:   "",
 		ToAccountID:     req.ToAccountID,
 		Amount:          req.Amount,
 		Timestamp:       time.Now(),
@@ -388,9 +348,7 @@ func DepositHandler(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{"message": "Deposit successful"})
 }
 
-// POST /loans
 func ApplyLoanHandler(w http.ResponseWriter, r *http.Request) {
-	// ВАЖНО: Нет проверки аутентификации!
 	var req ApplyLoanRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request payload")
@@ -403,7 +361,6 @@ func ApplyLoanHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Проверяем существование пользователя и счета
 	storage.mu.RLock()
 	_, userExists := storage.users[req.UserID]
 	_, accountExists := storage.accounts[req.AccountID]
@@ -418,17 +375,14 @@ func ApplyLoanHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Получаем "ключевую ставку" (нашу заглушку)
 	baseRate, err := GetCBRKeyRate()
 	if err != nil {
 		log.Printf("Warning: Failed to get key rate, using default 10%%: %v", err)
-		baseRate = decimal.NewFromInt(10) // Ставка по умолчанию, если ЦБ недоступен
+		baseRate = decimal.NewFromInt(10)
 	}
 
-	// Добавляем маржу банка (например, 5%)
 	interestRate := baseRate.Add(decimal.NewFromInt(5))
 
-	// Рассчитываем платеж и график
 	monthlyPayment := CalculateMonthlyPayment(req.Amount, interestRate, req.TermMonths)
 	startDate := time.Now()
 	schedule := GeneratePaymentSchedule(req.Amount, interestRate, req.TermMonths, startDate, monthlyPayment)
@@ -442,27 +396,23 @@ func ApplyLoanHandler(w http.ResponseWriter, r *http.Request) {
 		TermMonths:      req.TermMonths,
 		StartDate:       startDate,
 		PaymentSchedule: schedule,
-		RemainingAmount: req.Amount, // Изначально равно сумме кредита
+		RemainingAmount: req.Amount,
 	}
 
-	// Сохраняем кредит
 	if err := AddLoan(loan); err != nil {
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to save loan: %v", err))
 		return
 	}
 
-	// Зачисляем сумму кредита на счет клиента
 	err = UpdateAccountBalance(req.AccountID, req.Amount)
 	if err != nil {
-		// В реальном приложении здесь нужна логика отката сохранения кредита!
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to disburse loan funds: %v", err))
 		return
 	}
 
-	// Записываем транзакцию зачисления кредита
 	tx := Transaction{
 		ID:              GenerateID(),
-		FromAccountID:   "", // Источник - банк
+		FromAccountID:   "", //
 		ToAccountID:     req.AccountID,
 		Amount:          req.Amount,
 		Timestamp:       time.Now(),
@@ -477,9 +427,7 @@ func ApplyLoanHandler(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusCreated, loan)
 }
 
-// GET /loans/{loanId}/schedule
 func GetLoanScheduleHandler(w http.ResponseWriter, r *http.Request) {
-	// ВАЖНО: Нет проверки аутентификации/авторизации!
 	vars := mux.Vars(r)
 	loanID := vars["loanId"]
 
@@ -493,9 +441,7 @@ func GetLoanScheduleHandler(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, loan.PaymentSchedule)
 }
 
-// GET /analytics/transactions/{accountId}
 func GetTransactionsHandler(w http.ResponseWriter, r *http.Request) {
-	// ВАЖНО: Нет проверки аутентификации/авторизации!
 	vars := mux.Vars(r)
 	accountID := vars["accountId"]
 
@@ -506,7 +452,6 @@ func GetTransactionsHandler(w http.ResponseWriter, r *http.Request) {
 
 	transactions := GetAccountTransactions(accountID)
 
-	// Сортируем по дате (от новых к старым) для удобства
 	sort.Slice(transactions, func(i, j int) bool {
 		return transactions[i].Timestamp.After(transactions[j].Timestamp)
 	})
@@ -515,9 +460,7 @@ func GetTransactionsHandler(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, transactions)
 }
 
-// GET /analytics/summary/{userId}
 func GetFinancialSummaryHandler(w http.ResponseWriter, r *http.Request) {
-	// ВАЖНО: Нет проверки аутентификации/авторизации!
 	vars := mux.Vars(r)
 	userID := vars["userId"]
 
@@ -532,9 +475,6 @@ func GetFinancialSummaryHandler(w http.ResponseWriter, r *http.Request) {
 	totalLoanDebt := decimal.Zero
 	activeLoans := 0
 	for _, loan := range loans {
-		// В нашем простом примере RemainingAmount не обновляется автоматически при платежах.
-		// Для точного расчета нужно было бы пройтись по графику и отметить оплаченные.
-		// Пока просто суммируем начальную сумму или сохраненный остаток.
 		totalLoanDebt = totalLoanDebt.Add(loan.RemainingAmount)
 		if loan.RemainingAmount.GreaterThan(decimal.Zero) {
 			activeLoans++
@@ -545,8 +485,8 @@ func GetFinancialSummaryHandler(w http.ResponseWriter, r *http.Request) {
 		"user_id":               userID,
 		"total_account_balance": totalBalance,
 		"number_of_accounts":    len(accounts),
-		"total_loan_debt":       totalLoanDebt, // Упрощенный расчет
-		"active_loans":          activeLoans,   // Упрощенный расчет
+		"total_loan_debt":       totalLoanDebt,
+		"active_loans":          activeLoans,
 	}
 
 	log.Printf("Generated financial summary for user %s", userID)
